@@ -1,5 +1,6 @@
 import random
 import heapq
+import math
 
 jumlah_rumah = 100
 jumlah_tps = 3
@@ -61,19 +62,24 @@ for node in all_nodes: # untuk setiap node, buat 2-5 tetangga acak dengan jarak 
 
 # shortest path ucs
 def shortest_path(start, goal):
-    pq = [] # priority queue untuk UCS
-    heapq.heappush(pq, (0, start))
-    visited = set() # untuk menyimpan node yang sudah dikunjungi
+    pq = [(0, start)]
+    dist_map = {start: 0}
+
     while pq:
-        cost, node = heapq.heappop(pq) # ambil node dengan cost terendah
+        cost, node = heapq.heappop(pq)
+
         if node == goal:
             return cost
-        if node in visited:
+
+        if cost > dist_map.get(node, float('inf')):
             continue
-        visited.add(node)
-        for nxt, dist in graph[node]: # nxt adalah tetangga, dist adalah jarak ke tetangga
-            if nxt not in visited:
-                heapq.heappush(pq, ( cost + dist, str(nxt)))
+
+        for nxt, w in graph[node]:
+            new_cost = cost + w
+            if new_cost < dist_map.get(nxt, float('inf')):
+                dist_map[nxt] = new_cost
+                heapq.heappush(pq, (new_cost, nxt))
+
     return 999999
 
 house_zone = {} # untuk menyimpan zona rumah, yaitu TPS terdekatnya
@@ -101,6 +107,77 @@ def nearest_available_tps(vehicle):
             best = tps # simpan objek TPS terbaik
     return best, best_cost
 
+def nearest_truck(vehicle):
+    best = None
+    best_dist = 999999
+    for v in vehicles:
+        if v.vtype != "truk":
+            continue
+        free = kapasitas_truk - v.load
+        if free <= 0:
+            continue
+        d = shortest_path(vehicle.position, v.position)
+        if d < best_dist:
+            best_dist = d
+            best = v
+
+    return best, best_dist
+
+def transfer_to_truck(gerobak):
+    if gerobak.load <= 0:
+        return False
+
+    truck, dist = nearest_truck(gerobak)
+
+    if truck is None:
+        return False
+
+    if dist != 0:
+        return False
+
+    if not move(gerobak, dist):
+        return False
+
+    free = kapasitas_truk - truck.load
+
+    amount = min(gerobak.load, free)
+
+    if amount <= 0:
+        return False
+
+    truck.load += amount
+    gerobak.load -= amount
+    gerobak.time_used += amount * 2
+
+    for hid, kg in list(gerobak.cargo_detail.items()):
+        take = min(kg, amount)
+
+        truck.cargo_detail[hid] = (
+            truck.cargo_detail.get(hid, 0)
+            + take
+        )
+
+        gerobak.cargo_detail[hid] -= take
+
+        if gerobak.cargo_detail[hid] <= 0:
+            del gerobak.cargo_detail[hid]
+
+        amount -= take
+
+        if amount <= 0:
+            break
+
+    t = format_time(
+        gerobak.start_time,
+        gerobak.time_used
+    )
+
+    gerobak.log.append(
+        f"{t} - titip sampah ke {truck.name}"
+    )
+
+    return True
+
 def best_house(vehicle):
     best = None
     best_score = -999
@@ -115,12 +192,12 @@ def best_house(vehicle):
         tps_dist = shortest_path(h.id, zone)
         if vehicle.vtype == "gerobak":
             # prioritaskan dekat TPS
-            if tps_dist > 5:
+            if tps_dist > 4:
                 continue
             score = (h.waste * 2 - d - tps_dist)
         else:
             # prioritaskan jauh TPS
-            if tps_dist <= 5:
+            if tps_dist <= 4:
                 continue
             score = (h.waste * 2 + tps_dist - d)
         if score > best_score:
@@ -172,7 +249,7 @@ def load_house(vehicle, house, dist):
         return False
     house.waste -= take
     vehicle.load += take
-    vehicle.cargo_detail[h.id] = (vehicle.cargo_detail.get(h.id, 0) + take) # angka 0 untuk default jika rumah ini belum pernah diambil sebelumnya
+    vehicle.cargo_detail[house.id] = (vehicle.cargo_detail.get(house.id, 0) + take) # angka 0 untuk default jika rumah ini belum pernah diambil sebelumnya
     t = format_time(vehicle.start_time, vehicle.time_used)
     t = format_time(vehicle.start_time, vehicle.time_used)
     vehicle.log.append(f"{t} - {vehicle.name} ambil {take}kg dari {house.id} | jarak: {dist}")
@@ -229,7 +306,7 @@ for tps in tps_nodes:
 # 2. JAMIN MINIMAL 1 TRUK PER TPS
 for tps in tps_nodes:
     if used_truk < total_truk:
-        vehicles.append(Vehicle(f"T{used_truk}", "truck", tps.id))
+        vehicles.append(Vehicle(f"T{used_truk}", "truk", tps.id))
         used_truk += 1
 
 # 3. SISA GEROBAK RANDOM
@@ -240,29 +317,7 @@ for i in range(used_gerobak, total_gerobak):
 # 4. SISA TRUK RANDOM
 for i in range(used_truk, total_truk):
     tps = random.choice(tps_nodes)
-    vehicles.append(Vehicle(f"T{i}", "truck", tps.id))
-
-def operate(vehicle):
-    max_time = gerobak_selesai - gerobak_mulai \
-        if vehicle.vtype == "gerobak" \
-        else truk_selesai - truk_mulai
-    while vehicle.time_used < max_time:
-        if vehicle.load >= ( kapasitas_gerobak if vehicle.vtype == "gerobak" else kapasitas_truk):
-            dump_to_tps(vehicle)
-            continue
-        house, dist = best_house(vehicle)
-        if house is None:
-            break
-        move(vehicle, dist)
-        vehicle.position = house.id
-        load_house(vehicle, house, dist)
-        if vehicle.load > 0:
-            dump_to_tps(vehicle)
-        if not move(vehicle, dist):
-            return
-        vehicle.position = house.id
-        if not load_house(vehicle, house, dist):
-            return
+    vehicles.append(Vehicle(f"T{i}", "truk", tps.id))
 
 def operate_one_step(vehicle):
     max_time = (
@@ -288,10 +343,17 @@ def operate_one_step(vehicle):
 
     # 3. DUMP jika perlu
     if vehicle.load > 0:
-        dump_to_tps(vehicle)
+        if vehicle.vtype == "gerobak":
+            if not transfer_to_truck(vehicle):
+                dump_to_tps(vehicle)
+        else:
+            dump_to_tps(vehicle)
 
 active = True
-while active: 
+iteration = 0
+max_iter = 10000
+while active and iteration < max_iter:
+    iteration += 1
     active = False
     for v in vehicles:
         before = v.time_used
