@@ -49,6 +49,7 @@ class Vehicle:
 graph = {}
 all_nodes = []
 houses = [House(i) for i in range(jumlah_rumah)]
+total_sampah_awal = sum(h.waste for h in houses)
 tps_nodes = [TPS(f"TPS{i}") for i in range(jumlah_tps)]
 all_nodes.extend(houses)
 all_nodes.extend(tps_nodes)
@@ -251,8 +252,6 @@ def load_house(vehicle, house, dist):
     take = min(cap, house.waste) # min untuk memastikan tidak mengambil lebih dari yang bisa diangkut atau yang tersedia di rumah
     if take <= 0:
         return False
-    if not can_load(vehicle, take):
-        return False
     house.waste -= take
     vehicle.load += take
     vehicle.cargo_detail[house.id] = (vehicle.cargo_detail.get(house.id, 0) + take) # angka 0 untuk default jika rumah ini belum pernah diambil sebelumnya
@@ -341,9 +340,11 @@ def operate_one_step(vehicle):
 
     if house is None:
 
-        if vehicle.load > 0:
+        if vehicle.vtype == "gerobak":
+            if not transfer_to_truck(vehicle):
+                dump_to_tps(vehicle)
+        else:
             dump_to_tps(vehicle)
-
         return
 
     if not move(vehicle, dist):
@@ -373,7 +374,25 @@ while active and iteration < max_iter:
         if v.time_used > before:
             active = True
 
+sisa_rumah = sum(h.waste for h in houses)
+sisa_truk = sum(v.load for v in vehicles if v.vtype == "truk")
+sisa_gerobak = sum(v.load for v in vehicles if v.vtype == "gerobak")
+tidak_sampai_tps = (sisa_rumah + sisa_truk + sisa_gerobak)
+total_truk_distance = 0
+total_gerobak_distance = 0
+total_truk_time = 0
+total_gerobak_time = 0
+
+for v in vehicles:
+    if v.vtype == "truk":
+        total_truk_distance += v.distance
+        total_truk_time += v.time_used
+    else:
+        total_gerobak_distance += v.distance
+        total_gerobak_time += v.time_used
+
 # REPORT
+print("Total sampah awal:", total_sampah_awal)
 print("\nTPS ")
 for t in tps_nodes:
     print(t.id, "isi:", t.current, "/", t.capacity)
@@ -384,16 +403,14 @@ for v in vehicles:
     total_distance += v.distance
     print( v.name, "| waktu:", round(v.time_used, 2), "| jarak:", v.distance, "| sisa muatan:", v.load, "kg", "| zona:", v.home_tps)
 print("\ntotal jarak semua kendaraan:", total_distance)
+print("total jarak truk:", total_truk_distance)
+print("total jarak gerobak:", total_gerobak_distance)
+print("total waktu truk:", total_truk_time)
+print("total waktu gerobak:", total_gerobak_time)
+remain = sum(h.waste for h in houses)
+print("\nSisa sampah rumah: ", remain)
+print("\nSampah tidak sampai TPS:", tidak_sampai_tps)
 
-print("\nSisa sampah rumah")
-remain = sum(h.waste for h in houses) # total sampah yang masih tersisa di rumah-rumah
-print(remain)
-# print rumah yang masih punya sampah di semua zona
-for zone in set(house_zone.values()):
-    print(f"\nZona {zone}:")
-    for h in houses:
-        if house_zone[h.id] == zone and h.waste > 0:
-            print(f"{h.id}: {h.waste}kg | jarak ke TPS: {house_tps_distance[h.id]}")
 
 print("\nlog aktivitas kendaraan")
 for v in vehicles:
@@ -415,6 +432,7 @@ for t in tps_nodes:
         marker="*",
         s=300
     )
+    plt.text(t.x, t.y, t.id)
 
 plt.title("Peta Penduduk Desa")
 plt.grid(True)
