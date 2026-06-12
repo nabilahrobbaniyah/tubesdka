@@ -230,15 +230,7 @@ def can_move(vehicle, dist):
         vehicle.time_used + t
         <= max_operating_time(vehicle)
     )
-def can_load(vehicle, kg):
-    if vehicle.vtype == "gerobak":
-        t = kg * 2
-    else:
-        t = (kg / 10) * 2
-    return (
-        vehicle.time_used + t
-        <= max_operating_time(vehicle)
-    )
+
 # TIME
 def move(vehicle, dist):
     if not can_move(vehicle, dist):
