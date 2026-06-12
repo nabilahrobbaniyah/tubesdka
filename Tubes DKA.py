@@ -55,13 +55,17 @@ all_nodes.extend(houses)
 all_nodes.extend(tps_nodes)
 for node in all_nodes: # inisialisasi graph
     graph[node.id] = []
-for node in all_nodes: # untuk setiap node, buat 2-5 tetangga acak dengan jarak 1-5
+for node in all_nodes:
     neighbors = random.sample(
         [n for n in all_nodes if n.id != node.id],
-        random.randint(1, 5)
+        random.randint(2, 5)
     )
-    for nb in neighbors: # untuk setiap tetangga, tambahkan ke graph dengan jarak acak
-        d = random.randint(1, 5)
+    for nb in neighbors:
+        euclid = math.sqrt(
+            (node.x - nb.x)**2 +
+            (node.y - nb.y)**2
+        )
+        d = max(1, min(5, round(euclid / 20)))
         graph[node.id].append((nb.id, d))
         graph[nb.id].append((node.id, d))
 
@@ -137,7 +141,7 @@ def transfer_to_truck(gerobak):
     if truck is None:
         return False
 
-    if dist != 0:
+    if dist > 1:
         return False
 
     if not move(gerobak, dist):
@@ -204,7 +208,7 @@ def best_house(vehicle):
             h.id
         )
 
-        score = h.waste * 2 - d
+        score = h.waste / (d + 1)
 
         if score > best_score:
             best_score = score
@@ -356,7 +360,7 @@ def operate_one_step(vehicle):
         return
 
     # kalau sudah penuh atau rumah habis
-    if vehicle.load >= vehicle.free_capacity() + vehicle.load:
+    if vehicle.free_capacity() == 0:
         dump_to_tps(vehicle)
 
     elif vehicle.load > 0:
@@ -424,6 +428,7 @@ plt.figure(figsize=(10,8))
 
 for h in houses:
     plt.scatter(h.x, h.y, s=20)
+    plt.text(h.x + 0.5, h.y + 0.5, h.id, fontsize=6)
 
 for t in tps_nodes:
     plt.scatter(
