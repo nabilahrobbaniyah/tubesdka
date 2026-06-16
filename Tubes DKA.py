@@ -69,6 +69,19 @@ for node in all_nodes:
         graph[node.id].append((nb.id, d))
         graph[nb.id].append((node.id, d))
 
+house_zone = {} # untuk menyimpan zona rumah, yaitu TPS terdekatnya
+house_tps_distance = {}
+for h in houses:
+    nearest = None
+    best_dist = 999999
+    for tps in tps_nodes:
+        d = shortest_path(h.id, tps.id)
+        if d < best_dist: # jika jarak ke TPS ini lebih dekat, update zona rumah
+            best_dist = d
+            nearest = tps.id
+    house_zone[h.id] = nearest
+    house_tps_distance[h.id] = best_dist
+
 # shortest path ucs
 def shortest_path(start, goal):
     pq = [(0, start)]
@@ -90,19 +103,6 @@ def shortest_path(start, goal):
                 heapq.heappush(pq, (new_cost, nxt))
 
     return 999999
-
-house_zone = {} # untuk menyimpan zona rumah, yaitu TPS terdekatnya
-house_tps_distance = {}
-for h in houses:
-    nearest = None
-    best_dist = 999999
-    for tps in tps_nodes:
-        d = shortest_path(h.id, tps.id)
-        if d < best_dist: # jika jarak ke TPS ini lebih dekat, update zona rumah
-            best_dist = d
-            nearest = tps.id
-    house_zone[h.id] = nearest
-    house_tps_distance[h.id] = best_dist
 
 def nearest_available_tps(vehicle):
     best = None
